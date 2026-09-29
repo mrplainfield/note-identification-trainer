@@ -109,6 +109,14 @@
 
     <div class="controls">
         <label>Tempo (BPM): <input type="number" id="tempo" value="60" min="30" max="240"></label>
+        
+        <label>Clef: 
+            <select id="clefMode">
+                <option value="treble">Treble Clef</option>
+                <option value="bass">Bass Clef</option>
+            </select>
+        </label>
+
         <label>Accidentals: 
             <select id="accidentalMode">
                 <option value="none">Naturals Only</option>
@@ -162,7 +170,7 @@
             <line x1="10" y1="110" x2="290" y2="110" stroke="black" stroke-width="2"/>
             <line x1="10" y1="130" x2="290" y2="130" stroke="black" stroke-width="2"/>
             
-            <text x="20" y="115" font-size="80" font-family="serif" fill="black">&#119070;</text>
+            <text id="clefSymbol" x="20" y="115" font-size="80" font-family="serif" fill="black">&#119070;</text>
             
             <g id="noteGroup" style="display: none;">
                 <g id="ledgerGroup"></g>
@@ -185,6 +193,7 @@
 
         const uiTempo = document.getElementById('tempo');
         const uiMode = document.getElementById('accidentalMode');
+        const uiClef = document.getElementById('clefMode');
         const customNotesUI = document.getElementById('customNotesUI');
         const btn = document.getElementById('toggleBtn');
         const beatDisplay = document.getElementById('beatDisplay');
@@ -192,13 +201,22 @@
         const noteHead = document.getElementById('noteHead');
         const ledgerGroup = document.getElementById('ledgerGroup');
         const accidentalText = document.getElementById('accidentalText');
+        const clefSymbol = document.getElementById('clefSymbol');
 
-        const baseStaff = [
+        const trebleStaff = [
             { y: 180, step: 'G' }, { y: 170, step: 'A' }, { y: 160, step: 'B' }, { y: 150, step: 'C' },
             { y: 140, step: 'D' }, { y: 130, step: 'E' }, { y: 120, step: 'F' }, { y: 110, step: 'G' },
             { y: 100, step: 'A' }, { y: 90, step: 'B' }, { y: 80, step: 'C' }, { y: 70, step: 'D' },
             { y: 60, step: 'E' }, { y: 50, step: 'F' }, { y: 40, step: 'G' }, { y: 30, step: 'A' },
             { y: 20, step: 'B' }, { y: 10, step: 'C' }
+        ];
+
+        const bassStaff = [
+            { y: 180, step: 'B' }, { y: 170, step: 'C' }, { y: 160, step: 'D' }, { y: 150, step: 'E' },
+            { y: 140, step: 'F' }, { y: 130, step: 'G' }, { y: 120, step: 'A' }, { y: 110, step: 'B' },
+            { y: 100, step: 'C' }, { y: 90, step: 'D' }, { y: 80, step: 'E' }, { y: 70, step: 'F' },
+            { y: 60, step: 'G' }, { y: 50, step: 'A' }, { y: 40, step: 'B' }, { y: 30, step: 'C' },
+            { y: 20, step: 'D' }, { y: 10, step: 'E' }
         ];
 
         const pitches = [];
@@ -211,6 +229,16 @@
                 customNotesUI.style.display = 'block';
             } else {
                 customNotesUI.style.display = 'none';
+            }
+        });
+
+        uiClef.addEventListener('change', () => {
+            if (uiClef.value === 'treble') {
+                clefSymbol.innerHTML = '&#119070;';
+                clefSymbol.setAttribute('y', '115');
+            } else {
+                clefSymbol.innerHTML = '&#119074;';
+                clefSymbol.setAttribute('y', '105');
             }
         });
 
@@ -266,6 +294,7 @@
 
         function generateRandomNote() {
             const mode = uiMode.value;
+            const currentStaff = uiClef.value === 'treble' ? trebleStaff : bassStaff;
             let cy, accidental;
 
             if (mode === 'custom') {
@@ -273,7 +302,7 @@
                 if (checked.length === 0) return;
 
                 const pool = [];
-                baseStaff.forEach(noteObj => {
+                currentStaff.forEach(noteObj => {
                     if (checked.includes(noteObj.step)) pool.push({ y: noteObj.y, acc: '' });
                     if (checked.includes(noteObj.step + '♯')) pool.push({ y: noteObj.y, acc: '♯' });
                     if (checked.includes(noteObj.step + '♭')) pool.push({ y: noteObj.y, acc: '♭' });
