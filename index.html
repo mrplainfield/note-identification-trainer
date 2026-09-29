@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="note-identification-icon" href="note-identification-icon.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sight Reading Metronome</title>
@@ -56,6 +55,38 @@
         button.stop {
             background: #f44336;
         }
+        #customNotesUI {
+            display: none;
+            width: 100%;
+            background: #3d3d3d;
+            padding: 10px;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #customNotesUI .group-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        #customNotesUI .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        #customNotesUI .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            justify-content: flex-start;
+        }
+        #customNotesUI input[type="checkbox"] {
+            padding: 0;
+            width: 18px;
+            height: 18px;
+        }
         #staff-container {
             background: #fff;
             padding: 20px;
@@ -87,8 +118,39 @@
                 <option value="all">Naturals, Sharps & Flats</option>
                 <option value="naturals_sharps">Naturals & Sharps</option>
                 <option value="naturals_flats">Naturals & Flats</option>
+                <option value="custom">Custom Selection</option>
             </select>
         </label>
+        
+        <div id="customNotesUI">
+            <div class="group-title">Naturals</div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" class="custom-note" value="C" checked> C</label>
+                <label><input type="checkbox" class="custom-note" value="D" checked> D</label>
+                <label><input type="checkbox" class="custom-note" value="E" checked> E</label>
+                <label><input type="checkbox" class="custom-note" value="F" checked> F</label>
+                <label><input type="checkbox" class="custom-note" value="G" checked> G</label>
+                <label><input type="checkbox" class="custom-note" value="A" checked> A</label>
+                <label><input type="checkbox" class="custom-note" value="B" checked> B</label>
+            </div>
+            <div class="group-title">Sharps</div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" class="custom-note" value="C♯"> C♯</label>
+                <label><input type="checkbox" class="custom-note" value="D♯"> D♯</label>
+                <label><input type="checkbox" class="custom-note" value="F♯"> F♯</label>
+                <label><input type="checkbox" class="custom-note" value="G♯"> G♯</label>
+                <label><input type="checkbox" class="custom-note" value="A♯"> A♯</label>
+            </div>
+            <div class="group-title">Flats</div>
+            <div class="checkbox-group" style="margin-bottom: 0;">
+                <label><input type="checkbox" class="custom-note" value="D♭"> D♭</label>
+                <label><input type="checkbox" class="custom-note" value="E♭"> E♭</label>
+                <label><input type="checkbox" class="custom-note" value="G♭"> G♭</label>
+                <label><input type="checkbox" class="custom-note" value="A♭"> A♭</label>
+                <label><input type="checkbox" class="custom-note" value="B♭"> B♭</label>
+            </div>
+        </div>
+
         <button id="toggleBtn">Start</button>
     </div>
 
@@ -123,6 +185,7 @@
 
         const uiTempo = document.getElementById('tempo');
         const uiMode = document.getElementById('accidentalMode');
+        const customNotesUI = document.getElementById('customNotesUI');
         const btn = document.getElementById('toggleBtn');
         const beatDisplay = document.getElementById('beatDisplay');
         const noteGroup = document.getElementById('noteGroup');
@@ -130,10 +193,26 @@
         const ledgerGroup = document.getElementById('ledgerGroup');
         const accidentalText = document.getElementById('accidentalText');
 
+        const baseStaff = [
+            { y: 180, step: 'G' }, { y: 170, step: 'A' }, { y: 160, step: 'B' }, { y: 150, step: 'C' },
+            { y: 140, step: 'D' }, { y: 130, step: 'E' }, { y: 120, step: 'F' }, { y: 110, step: 'G' },
+            { y: 100, step: 'A' }, { y: 90, step: 'B' }, { y: 80, step: 'C' }, { y: 70, step: 'D' },
+            { y: 60, step: 'E' }, { y: 50, step: 'F' }, { y: 40, step: 'G' }, { y: 30, step: 'A' },
+            { y: 20, step: 'B' }, { y: 10, step: 'C' }
+        ];
+
         const pitches = [];
         for (let i = 10; i <= 180; i += 10) {
             pitches.push(i);
         }
+
+        uiMode.addEventListener('change', () => {
+            if (uiMode.value === 'custom') {
+                customNotesUI.style.display = 'block';
+            } else {
+                customNotesUI.style.display = 'none';
+            }
+        });
 
         function unlockAudioContext() {
             if (audioCtx.state === 'suspended') {
@@ -186,21 +265,39 @@
         }
 
         function generateRandomNote() {
-            const cy = pitches[Math.floor(Math.random() * pitches.length)];
             const mode = uiMode.value;
-            
-            const modeMap = {
-                'none': [''],
-                'sharps': ['♯'],
-                'flats': ['♭'],
-                'both': ['♯', '♭'],
-                'all': ['', '♯', '♭'],
-                'naturals_sharps': ['', '♯'],
-                'naturals_flats': ['', '♭']
-            };
-            
-            const options = modeMap[mode];
-            const accidental = options[Math.floor(Math.random() * options.length)];
+            let cy, accidental;
+
+            if (mode === 'custom') {
+                const checked = Array.from(document.querySelectorAll('.custom-note:checked')).map(cb => cb.value);
+                if (checked.length === 0) return;
+
+                const pool = [];
+                baseStaff.forEach(noteObj => {
+                    if (checked.includes(noteObj.step)) pool.push({ y: noteObj.y, acc: '' });
+                    if (checked.includes(noteObj.step + '♯')) pool.push({ y: noteObj.y, acc: '♯' });
+                    if (checked.includes(noteObj.step + '♭')) pool.push({ y: noteObj.y, acc: '♭' });
+                });
+
+                if (pool.length === 0) return;
+                const selectedNote = pool[Math.floor(Math.random() * pool.length)];
+                cy = selectedNote.y;
+                accidental = selectedNote.acc;
+            } else {
+                cy = pitches[Math.floor(Math.random() * pitches.length)];
+                const modeMap = {
+                    'none': [''],
+                    'sharps': ['♯'],
+                    'flats': ['♭'],
+                    'both': ['♯', '♭'],
+                    'all': ['', '♯', '♭'],
+                    'naturals_sharps': ['', '♯'],
+                    'naturals_flats': ['', '♭']
+                };
+                
+                const options = modeMap[mode];
+                accidental = options[Math.floor(Math.random() * options.length)];
+            }
 
             setTimeout(() => {
                 noteGroup.style.display = 'block';
