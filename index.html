@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Reading Metronome</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1e1e1e;
+            color: #fff;
+            margin-top: 20px;
+            padding: 10px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 380px;
+            box-sizing: border-box;
+        }
+        .controls label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+        }
+        input, select, button {
+            padding: 12px;
+            font-size: 16px;
+            background: #3d3d3d;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        input[type="number"] {
+            width: 80px;
+        }
+        button {
+            cursor: pointer;
+            font-weight: bold;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            margin-top: 10px;
+        }
+        button.stop {
+            background: #f44336;
+        }
+        #staff-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 380px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+        .beat-indicator {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label>Tempo (BPM): <input type="number" id="tempo" value="60" min="30" max="240"></label>
+        <label>Accidentals: 
+            <select id="accidentalMode">
+                <option value="none">Naturals Only</option>
+                <option value="sharps">Sharps Only</option>
+                <option value="flats">Flats Only</option>
+                <option value="both">Sharps & Flats</option>
+                <option value="all">Naturals, Sharps & Flats</option>
+                <option value="naturals_sharps">Naturals & Sharps</option>
+                <option value="naturals_flats">Naturals & Flats</option>
+            </select>
+        </label>
+        <button id="toggleBtn">Start</button>
+    </div>
+
+    <div id="staff-container">
+        <svg id="staff" width="300" height="240" viewBox="0 -10 300 220" xmlns="http://www.w3.org/2000/svg">
+            <line x1="10" y1="50" x2="290" y2="50" stroke="black" stroke-width="2"/>
+            <line x1="10" y1="70" x2="290" y2="70" stroke="black" stroke-width="2"/>
+            <line x1="10" y1="90" x2="290" y2="90" stroke="black" stroke-width="2"/>
+            <line x1="10" y1="110" x2="290" y2="110" stroke="black" stroke-width="2"/>
+            <line x1="10" y1="130" x2="290" y2="130" stroke="black" stroke-width="2"/>
+            
+            <text x="20" y="115" font-size="80" font-family="serif" fill="black">&#119070;</text>
+            
+            <g id="noteGroup" style="display: none;">
+                <g id="ledgerGroup"></g>
+                <ellipse id="noteHead" cx="180" cy="90" rx="10" ry="7" fill="black" transform="rotate(-20 180 90)"/>
+                <text id="accidentalText" x="145" y="95" font-size="28" font-family="serif" fill="black"></text>
+            </g>
+        </svg>
+    </div>
+
+    <div class="beat-indicator">Beat: <span id="beatDisplay">1</span> / 7</div>
+
+    <script>
+        let audioCtx;
+        let isPlaying = false;
+        let nextNoteTime = 0.0;
+        let currentBeat = 0; 
+        let timerID;
+        const beatsPerCycle = 7;
+        const lookahead = 0.1;
+
+        const uiTempo = document.getElementById('tempo');
+        const uiMode = document.getElementById('accidentalMode');
+        const btn = document.getElementById('toggleBtn');
+        const beatDisplay = document.getElementById('beatDisplay');
+        const noteGroup = document.getElementById('noteGroup');
+        const noteHead = document.getElementById('noteHead');
+        const ledgerGroup = document.getElementById('ledgerGroup');
+        const accidentalText = document.getElementById('accidentalText');
+
+        const pitches = [];
+        for (let i = 10; i <= 180; i += 10) {
+            pitches.push(i);
+        }
+
+        function unlockAudioContext() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const buffer = audioCtx.createBuffer(1, 1, 22050);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+        }
+
+        function playClick(time, isAccent) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.frequency.value = isAccent ? 1000 : 800;
+            gain.gain.setValueAtTime(1, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+            
+            osc.start(time);
+            osc.stop(time + 0.1);
+        }
+
+        function drawLedgerLines(cy) {
+            ledgerGroup.innerHTML = ''; 
+            const createLine = (y) => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', '155');
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', '205');
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', 'black');
+                line.setAttribute('stroke-width', '2');
+                ledgerGroup.appendChild(line);
+            };
+            
+            if (cy <= 30) {
+                for (let l = 30; l >= cy; l -= 20) {
+                    createLine(l);
+                }
+            } 
+            else if (cy >= 150) {
+                for (let l = 150; l <= cy; l += 20) {
+                    createLine(l);
+                }
+            }
+        }
+
+        function generateRandomNote() {
+            const cy = pitches[Math.floor(Math.random() * pitches.length)];
+            const mode = uiMode.value;
+            
+            const modeMap = {
+                'none': [''],
+                'sharps': ['♯'],
+                'flats': ['♭'],
+                'both': ['♯', '♭'],
+                'all': ['', '♯', '♭'],
+                'naturals_sharps': ['', '♯'],
+                'naturals_flats': ['', '♭']
+            };
+            
+            const options = modeMap[mode];
+            const accidental = options[Math.floor(Math.random() * options.length)];
+
+            setTimeout(() => {
+                noteGroup.style.display = 'block';
+                noteHead.setAttribute('cy', cy);
+                noteHead.setAttribute('transform', `rotate(-20 180 ${cy})`);
+                
+                drawLedgerLines(cy);
+                
+                accidentalText.textContent = accidental;
+                accidentalText.setAttribute('y', cy + 8); 
+            }, Math.max(0, (nextNoteTime - audioCtx.currentTime) * 1000));
+        }
+
+        function schedule() {
+            while (nextNoteTime < audioCtx.currentTime + lookahead) {
+                const isDownbeat = (currentBeat === 0);
+                playClick(nextNoteTime, isDownbeat);
+                
+                if (isDownbeat) {
+                    generateRandomNote();
+                }
+
+                const displayBeat = currentBeat + 1;
+                setTimeout(() => {
+                    beatDisplay.textContent = displayBeat;
+                }, Math.max(0, (nextNoteTime - audioCtx.currentTime) * 1000));
+
+                const secondsPerBeat = 60.0 / parseInt(uiTempo.value);
+                nextNoteTime += secondsPerBeat;
+                currentBeat = (currentBeat + 1) % beatsPerCycle;
+            }
+            timerID = requestAnimationFrame(schedule);
+        }
+
+        btn.addEventListener('click', () => {
+            if (!isPlaying) {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                unlockAudioContext();
+                
+                isPlaying = true;
+                btn.textContent = 'Stop';
+                btn.classList.add('stop');
+                
+                currentBeat = 0;
+                nextNoteTime = audioCtx.currentTime + 0.1;
+                generateRandomNote();
+                schedule();
+            } else {
+                isPlaying = false;
+                btn.textContent = 'Start';
+                btn.classList.remove('stop');
+                cancelAnimationFrame(timerID);
+                noteGroup.style.display = 'none';
+                beatDisplay.textContent = '-';
+            }
+        });
+    </script>
+</body>
+</html>
